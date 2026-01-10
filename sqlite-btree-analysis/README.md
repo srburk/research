@@ -11,6 +11,25 @@ This project provides:
 3. **Performance Benchmarks**: Measurable metrics comparing B-tree vs linear search
 4. **Test Suite**: Unit tests and Python-based test data generator
 
+## Performance Visualization
+
+### B-tree vs Linear Search Comparison
+
+The following chart demonstrates why database indexes matter - B-trees provide **up to 1,669x fewer comparisons** than linear search for large datasets:
+
+![B-tree vs Linear Search](assets/btree_vs_linear.png)
+
+### Comprehensive Benchmark Results
+
+The full benchmark analysis shows scaling behavior, optimal B-tree order selection, and performance characteristics:
+
+![B-tree Benchmark Results](assets/btree_benchmark_results.png)
+
+**Key Findings:**
+- **O(log N) Search**: Tree height only grows from 2 to 4 levels as records increase from 1K to 1M
+- **Optimal Order**: SQLite's choice of order ~128 provides the best balance of tree height vs node search time
+- **Massive Speedup**: At 50K records, B-tree search requires only 14.7 comparisons vs 24,596 for linear scan
+
 ## Project Structure
 
 ```
