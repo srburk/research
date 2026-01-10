@@ -1,0 +1,13 @@
+# Build artifacts
+build/
+*.o
+*.a
+
+# Generated test data
+tests/data/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
