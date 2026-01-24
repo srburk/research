@@ -1,20 +1,5 @@
-#!/usr/bin/env python3
-"""
-Real-time Silero VAD test with simulated phone audio quality.
+"""Real-time streaming VAD with phone audio simulation."""
 
-This script captures microphone audio on Mac, degrades it to phone quality
-(8kHz narrowband), and runs streaming VAD detection.
-
-Requirements:
-    pip install silero-vad pyaudio numpy scipy
-
-Usage:
-    python test_phone_vad_streaming.py
-    python test_phone_vad_streaming.py --silence-ms 1200  # More tolerance for slow speech
-    python test_phone_vad_streaming.py --no-degrade       # Skip phone quality simulation
-"""
-
-import argparse
 import collections
 import queue
 import sys
@@ -23,17 +8,11 @@ import time
 from dataclasses import dataclass
 
 import numpy as np
+import pyaudio
 import torch
-
-try:
-    import pyaudio
-except ImportError:
-    print("ERROR: pyaudio not installed.")
-    print("  Mac: brew install portaudio && pip install pyaudio")
-    print("  Or:  pip install pyaudio")
-    sys.exit(1)
-
 from silero_vad import load_silero_vad, VADIterator
+
+from .phone_simulator import PhoneAudioSimulator
 
 
 @dataclass
@@ -54,52 +33,13 @@ class AudioConfig:
         return int(self.output_rate * self.chunk_ms / 1000)  # 256 at 8kHz
 
 
-class PhoneAudioSimulator:
-    """Simulates phone-quality audio degradation."""
-
-    def __init__(self, input_rate: int = 16000, output_rate: int = 8000):
-        self.input_rate = input_rate
-        self.output_rate = output_rate
-
-        # Phone bandpass filter (300-3400 Hz)
-        try:
-            from scipy.signal import butter, sosfilt
-            self.sos = butter(4, [300, 3400], btype='band',
-                             fs=input_rate, output='sos')
-            self.use_filter = True
-        except ImportError:
-            print("Note: scipy not installed, skipping bandpass filter")
-            self.use_filter = False
-
-    def degrade(self, audio: np.ndarray) -> np.ndarray:
-        """Apply phone-quality degradation to audio."""
-        # 1. Bandpass filter (phone frequency range)
-        if self.use_filter:
-            from scipy.signal import sosfilt
-            audio = sosfilt(self.sos, audio).astype(np.float32)
-
-        # 2. Downsample to 8kHz
-        if self.input_rate != self.output_rate:
-            ratio = self.input_rate // self.output_rate
-            audio = audio[::ratio]
-
-        # 3. Add subtle noise (simulates line noise)
-        noise = np.random.normal(0, 0.002, len(audio)).astype(np.float32)
-        audio = audio + noise
-
-        # 4. Light compression (phone codecs compress dynamic range)
-        audio = np.tanh(audio * 1.5) / 1.5
-
-        return audio
-
-
 class StreamingVADTester:
     """Real-time VAD testing with microphone input."""
 
     def __init__(self, config: AudioConfig, vad_params: dict,
                  degrade_audio: bool = True):
         self.config = config
-        self.audio_queue = queue.Queue()
+        self.audio_queue: queue.Queue = queue.Queue()
         self.running = False
 
         # Phone audio simulator
@@ -121,8 +61,8 @@ class StreamingVADTester:
 
         # State tracking
         self.is_speaking = False
-        self.speech_start_time = None
-        self.speech_buffer = []
+        self.speech_start_time: float | None = None
+        self.speech_buffer: list = []
         self.total_speech_chunks = 0
 
         # PyAudio setup
@@ -135,7 +75,7 @@ class StreamingVADTester:
 
     def _process_audio(self):
         """Main processing loop."""
-        chunk_times = collections.deque(maxlen=100)
+        chunk_times: collections.deque = collections.deque(maxlen=100)
 
         while self.running:
             try:
@@ -156,7 +96,6 @@ class StreamingVADTester:
             # Ensure correct chunk size for VAD (256 samples at 8kHz)
             expected_size = self.config.output_chunk_size
             if len(audio) != expected_size:
-                # Resample/pad if needed
                 if len(audio) > expected_size:
                     audio = audio[:expected_size]
                 else:
@@ -182,7 +121,7 @@ class StreamingVADTester:
                 if avg_ms > 5:  # Only warn if slow
                     print(f"  [perf] Avg processing: {avg_ms:.1f}ms per chunk")
 
-    def _handle_vad_result(self, result: dict, prob: float, audio: np.ndarray):
+    def _handle_vad_result(self, result: dict | None, prob: float, audio: np.ndarray):
         """Handle VAD events and update display."""
         # Visual probability meter
         bar_len = int(prob * 30)
@@ -229,7 +168,7 @@ class StreamingVADTester:
                 print(f"      Sample rate: {int(info['defaultSampleRate'])}Hz")
         print("-" * 50)
 
-    def run(self, device_index: int = None):
+    def run(self, device_index: int | None = None):
         """Start streaming VAD test."""
         self.list_devices()
 
@@ -287,56 +226,3 @@ class StreamingVADTester:
             self.pa.terminate()
 
         print("Done.")
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Test Silero VAD with simulated phone audio quality"
-    )
-    parser.add_argument(
-        '--threshold', type=float, default=0.45,
-        help='Speech detection threshold (default: 0.45)'
-    )
-    parser.add_argument(
-        '--silence-ms', type=int, default=1000,
-        help='Min silence duration in ms to end speech (default: 1000)'
-    )
-    parser.add_argument(
-        '--pad-ms', type=int, default=100,
-        help='Speech padding in ms (default: 100)'
-    )
-    parser.add_argument(
-        '--device', type=int, default=None,
-        help='Audio input device index (default: system default)'
-    )
-    parser.add_argument(
-        '--no-degrade', action='store_true',
-        help='Skip phone quality simulation (use raw mic audio)'
-    )
-    parser.add_argument(
-        '--sample-rate', type=int, default=8000,
-        choices=[8000, 16000],
-        help='Target sample rate (default: 8000 for phone quality)'
-    )
-
-    args = parser.parse_args()
-
-    config = AudioConfig(output_rate=args.sample_rate)
-
-    vad_params = {
-        'threshold': args.threshold,
-        'min_silence_duration_ms': args.silence_ms,
-        'speech_pad_ms': args.pad_ms,
-    }
-
-    tester = StreamingVADTester(
-        config=config,
-        vad_params=vad_params,
-        degrade_audio=not args.no_degrade
-    )
-
-    tester.run(device_index=args.device)
-
-
-if __name__ == '__main__':
-    main()
