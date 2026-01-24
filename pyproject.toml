@@ -1,0 +1,26 @@
+[project]
+name = "silero-vad-phone-test"
+version = "0.1.0"
+description = "Real-time Silero VAD testing with simulated phone audio quality"
+requires-python = ">=3.10"
+dependencies = [
+    "silero-vad>=5.1",
+    "pyaudio>=0.2.14",
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "torch>=2.0.0",
+    "torchaudio>=2.0.0",
+]
+
+[project.scripts]
+vad-test = "silero_vad_phone_test.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0.0",
+    "ruff>=0.4.0",
+]
