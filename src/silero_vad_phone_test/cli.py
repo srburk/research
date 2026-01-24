@@ -2,7 +2,7 @@
 
 import argparse
 
-from .streaming_vad import AudioConfig, StreamingVADTester
+from .streaming_vad import AudioConfig, VADConfig, StreamingVADTester
 
 
 def main():
@@ -15,8 +15,17 @@ def main():
         help='Speech detection threshold (default: 0.45)'
     )
     parser.add_argument(
+        '--neg-threshold', type=float, default=None,
+        help='Silence detection threshold - prob below this starts silence counter '
+             '(default: threshold - 0.15). Lower = more tolerant of pauses.'
+    )
+    parser.add_argument(
         '--silence-ms', type=int, default=1000,
         help='Min silence duration in ms to end speech (default: 1000)'
+    )
+    parser.add_argument(
+        '--min-speech-ms', type=int, default=250,
+        help='Min speech duration in ms to report (default: 250)'
     )
     parser.add_argument(
         '--pad-ms', type=int, default=100,
@@ -40,15 +49,17 @@ def main():
 
     config = AudioConfig(output_rate=args.sample_rate)
 
-    vad_params = {
-        'threshold': args.threshold,
-        'min_silence_duration_ms': args.silence_ms,
-        'speech_pad_ms': args.pad_ms,
-    }
+    vad_config = VADConfig(
+        threshold=args.threshold,
+        neg_threshold=args.neg_threshold,  # None = auto (threshold - 0.15)
+        min_silence_duration_ms=args.silence_ms,
+        min_speech_duration_ms=args.min_speech_ms,
+        speech_pad_ms=args.pad_ms,
+    )
 
     tester = StreamingVADTester(
         config=config,
-        vad_params=vad_params,
+        vad_config=vad_config,
         degrade_audio=not args.no_degrade
     )
 
