@@ -1,0 +1,7 @@
+# Requirements for Silero VAD streaming test
+silero-vad>=5.1
+pyaudio>=0.2.14
+numpy>=1.24.0
+scipy>=1.10.0      # Optional: for phone bandpass filter
+torch>=2.0.0
+torchaudio>=2.0.0
